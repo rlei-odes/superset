@@ -16,8 +16,18 @@
 # under the License.
 from werkzeug.local import LocalProxy
 
-from superset.app import create_app  # noqa: F401
-from superset.extensions import (
+# pandas >= 2.2 advertises a minimum SQLAlchemy of 2.0 and silently ignores
+# older installations, breaking DataFrame.to_sql / read_sql with SQLAlchemy
+# 1.4 engines. Its SQL layer still works with 1.4, so restore support until
+# Superset itself requires SQLAlchemy >= 2. Must run before any pandas SQL IO.
+from superset.utils.pandas_sqlalchemy_compat import (  # noqa: E402
+    restore_pandas_sqlalchemy_support,
+)
+
+restore_pandas_sqlalchemy_support()
+
+from superset.app import create_app  # noqa: E402, F401
+from superset.extensions import (  # noqa: E402
     appbuilder,  # noqa: F401
     cache_manager,
     db,  # noqa: F401
