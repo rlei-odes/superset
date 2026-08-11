@@ -38,7 +38,7 @@ from superset.extensions import (  # noqa: E402
     security_manager,  # noqa: F401
     talisman,  # noqa: F401
 )
-from superset.security import SupersetSecurityManager  # noqa: F401
+from superset.security import SupersetSecurityManager  # noqa: E402, F401
 
 # All of the fields located here should be considered legacy. The correct way to
 # declare "global" dependencies is to define it in extensions.py,
