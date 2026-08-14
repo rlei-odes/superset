@@ -129,6 +129,7 @@
     "@superset-ui/chart-controls": "file:./packages/superset-ui-chart-controls",
     "@superset-ui/core": "file:./packages/superset-ui-core",
     "@superset-ui/plugin-chart-ag-grid-table": "file:./plugins/plugin-chart-ag-grid-table",
+    "@superset-ui/plugin-chart-business-bar": "file:./plugins/plugin-chart-business-bar",
     "@superset-ui/plugin-chart-calendar": "file:./plugins/plugin-chart-calendar",
     "@superset-ui/plugin-chart-cartodiagram": "file:./plugins/plugin-chart-cartodiagram",
     "@superset-ui/plugin-chart-chord": "file:./plugins/plugin-chart-chord",

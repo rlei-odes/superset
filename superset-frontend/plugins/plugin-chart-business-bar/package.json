@@ -1,0 +1,27 @@
+{
+  "name": "@superset-ui/plugin-chart-business-bar",
+  "version": "0.0.1",
+  "description": "Superset Chart - Business Bar (role-based series styling)",
+  "keywords": [
+    "business-charts",
+    "ibcs",
+    "superset"
+  ],
+  "license": "Apache-2.0",
+  "author": "Superset",
+  "files": [
+    "esm",
+    "lib"
+  ],
+  "sideEffects": false,
+  "main": "lib/index.js",
+  "module": "esm/index.js",
+  "peerDependencies": {
+    "@apache-superset/core": "*",
+    "@superset-ui/chart-controls": "*",
+    "@superset-ui/core": "*",
+    "@superset-ui/plugin-chart-echarts": "*",
+    "echarts": "*",
+    "react": "^18.3.0"
+  }
+}

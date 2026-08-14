@@ -66,6 +66,7 @@ import {
   EchartsTimePivotChartPlugin,
   EchartsBulletChartPlugin,
 } from '@superset-ui/plugin-chart-echarts';
+import { BusinessBarChartPlugin } from '@superset-ui/plugin-chart-business-bar';
 import {
   SelectFilterPlugin,
   RangeFilterPlugin,
@@ -109,6 +110,7 @@ export default class MainPreset extends Preset {
         new BigNumberTotalChartPlugin().configure({
           key: VizType.BigNumberTotal,
         }),
+        new BusinessBarChartPlugin().configure({ key: 'business_bar' }),
         new EchartsBoxPlotChartPlugin().configure({ key: VizType.BoxPlot }),
         new EchartsBulletChartPlugin().configure({ key: VizType.Bullet }),
         new CalendarChartPlugin().configure({ key: VizType.Calendar }),
