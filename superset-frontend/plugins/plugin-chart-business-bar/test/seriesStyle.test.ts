@@ -249,3 +249,55 @@ test('unparseable rules yield none rather than throwing', () => {
   expect(parseSeriesStyleRules(undefined)).toEqual([]);
   expect(parseSeriesStyleRules('{"not":"an array"}')).toEqual([]);
 });
+
+test('matches a metric under its dataset verbose name', () => {
+  // With a groupby the series name carries the verbose name, because the
+  // inverted-verbose-map lookup upstream only hits on an exact whole-name
+  // match. The rule stores the metric's own label either way.
+  const verboseMap = { sum__sales: 'Total sales' };
+  expect(
+    matchesRuleKey(
+      'Total sales, EMEA',
+      { kind: 'metric', metric: 'sum__sales' },
+      verboseMap,
+    ),
+  ).toBe(true);
+});
+
+test('matches a metric by its raw label even when a verbose name exists', () => {
+  // Ungrouped, the same metric comes back un-verbosed, so both spellings have
+  // to match or rules would work until a groupby was added.
+  expect(
+    matchesRuleKey(
+      'sum__sales',
+      { kind: 'metric', metric: 'sum__sales' },
+      { sum__sales: 'Total sales' },
+    ),
+  ).toBe(true);
+});
+
+test('a verbose name does not make an unrelated series match', () => {
+  expect(
+    matchesRuleKey(
+      'Total costs, EMEA',
+      { kind: 'metric', metric: 'sum__sales' },
+      { sum__sales: 'Total sales' },
+    ),
+  ).toBe(false);
+});
+
+test('applies styling to a verbose-named series', () => {
+  const series: StylableSeries[] = [
+    { name: 'Total sales, EMEA', itemStyle: { color: '#1f77b4' } },
+  ];
+  const styled = applySeriesStyles(
+    series,
+    [metricRule('sum__sales', SeriesRole.Plan)],
+    theme,
+    { sum__sales: 'Total sales' },
+  );
+  expect(styled[0].itemStyle).toMatchObject({
+    color: 'transparent',
+    borderColor: '#1f77b4',
+  });
+});

@@ -48,14 +48,28 @@ export function splitSeriesName(seriesName: string): string[] {
  * A series belongs to a metric when its name is exactly the metric label (no
  * groupby) or begins with it (grouped). Comparing against the escaped label
  * keeps metrics containing a comma — `AVG(a, b)` — matching correctly.
+ *
+ * A rule stores the metric's own label, but the series name may carry the
+ * dataset's `verbose_name` for it instead, so both are tried. Upstream is
+ * genuinely inconsistent here: the pivoted columns are renamed to verbose names
+ * (`rebaseForecastDatum`), and the Timeseries transform then maps the name back
+ * through an inverted verbose map — but only on an exact whole-name hit
+ * (`Timeseries/transformProps.ts`, `inverted[entryName] || entryName`). So an
+ * ungrouped series ends up named `SUM(sales)` while the same metric grouped by
+ * region ends up `Total sales, EMEA`. Matching only one of the two would make
+ * rules work until a groupby was added, then silently stop.
  */
 export function matchesRuleKey(
   seriesName: string,
   key: SeriesStyleRuleKey,
+  verboseMap: Record<string, string> = {},
 ): boolean {
   if (key.kind === 'metric') {
-    const metric = escapeSeparator(key.metric);
-    return seriesName === metric || seriesName.startsWith(metric + SEPARATOR);
+    const aliases = [key.metric, verboseMap[key.metric]].filter(Boolean);
+    return aliases.some(alias => {
+      const metric = escapeSeparator(alias as string);
+      return seriesName === metric || seriesName.startsWith(metric + SEPARATOR);
+    });
   }
   if (key.kind === 'dimension') {
     // Segment 0 is the metric; dimension values occupy the rest.
@@ -120,8 +134,9 @@ export function readSeriesStyleRules(chartProps: {
 export function findRule(
   seriesName: string,
   rules: SeriesStyleRule[],
+  verboseMap: Record<string, string> = {},
 ): SeriesStyleRule | undefined {
-  return rules.find(rule => matchesRuleKey(seriesName, rule.key));
+  return rules.find(rule => matchesRuleKey(seriesName, rule.key, verboseMap));
 }
 
 /** Resolves a rule against its theme-derived role defaults. */
@@ -211,6 +226,7 @@ export function applySeriesStyles<T extends StylableSeries>(
   series: T[],
   rules: SeriesStyleRule[],
   theme: RoleThemeTokens,
+  verboseMap: Record<string, string> = {},
 ): T[] {
   if (!rules?.length) {
     return series;
@@ -218,7 +234,7 @@ export function applySeriesStyles<T extends StylableSeries>(
 
   return series.map(entry => {
     const name = typeof entry.name === 'string' ? entry.name : '';
-    const rule = findRule(name, rules);
+    const rule = findRule(name, rules, verboseMap);
     if (!rule) {
       return entry;
     }

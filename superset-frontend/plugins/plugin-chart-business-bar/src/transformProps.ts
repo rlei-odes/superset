@@ -21,7 +21,50 @@ import {
   EchartsTimeseriesSeriesType,
   TimeseriesTransformProps,
 } from '@superset-ui/plugin-chart-echarts';
+import { applyChartChrome, readChromeOptions } from './chrome';
 import { applySeriesStyles, readSeriesStyleRules } from './seriesStyle';
+
+/**
+ * Applies role styling to the finished series array, or returns it untouched
+ * when styling cannot apply.
+ */
+function styleSeries(
+  chartProps: EchartsTimeseriesChartProps,
+  // Derived from the transform's own return type rather than named directly:
+  // the echarts package does not export its transformed-props type.
+  echartOptions: ReturnType<typeof TimeseriesTransformProps>['echartOptions'],
+) {
+  const rules = readSeriesStyleRules(chartProps);
+  if (!rules.length) {
+    return echartOptions;
+  }
+
+  /*
+   * `colorByPrimaryAxis` colours each bar individually and drops `itemStyle`
+   * from the series entirely (echarts plugin `Timeseries/transformers.ts`,
+   * where the spread is `...(colorByPrimaryAxis ? {} : { itemStyle })`).
+   * Role styling and that mode are therefore mutually exclusive; the rules are
+   * ignored rather than silently half-applied.
+   */
+  if (chartProps.formData.colorByPrimaryAxis) {
+    return echartOptions;
+  }
+
+  const { series } = echartOptions;
+  if (!Array.isArray(series)) {
+    return echartOptions;
+  }
+
+  return {
+    ...echartOptions,
+    series: applySeriesStyles(
+      series,
+      rules,
+      chartProps.theme,
+      chartProps.datasource?.verboseMap,
+    ),
+  };
+}
 
 /**
  * Wraps the shared Timeseries transform rather than forking it.
@@ -42,32 +85,14 @@ export default function transformProps(
     },
   });
 
-  const rules = readSeriesStyleRules(chartProps);
-  if (!rules.length) {
-    return transformed;
-  }
-
-  /*
-   * `colorByPrimaryAxis` colours each bar individually and drops `itemStyle`
-   * from the series entirely (echarts plugin `Timeseries/transformers.ts`,
-   * where the spread is `...(colorByPrimaryAxis ? {} : { itemStyle })`).
-   * Role styling and that mode are therefore mutually exclusive; the rules are
-   * ignored rather than silently half-applied.
-   */
-  if (chartProps.formData.colorByPrimaryAxis) {
-    return transformed;
-  }
-
-  const { series } = transformed.echartOptions;
-  if (!Array.isArray(series)) {
-    return transformed;
-  }
-
   return {
     ...transformed,
-    echartOptions: {
-      ...transformed.echartOptions,
-      series: applySeriesStyles(series, rules, chartProps.theme),
-    },
+    echartOptions: applyChartChrome(
+      styleSeries(chartProps, transformed.echartOptions),
+      readChromeOptions(chartProps),
+      // Compared as a string rather than against `OrientationType`, which the
+      // echarts package does not export from its index.
+      chartProps.formData.orientation === 'horizontal',
+    ),
   };
 }

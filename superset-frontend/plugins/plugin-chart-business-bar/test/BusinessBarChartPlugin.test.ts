@@ -43,10 +43,32 @@ test('keeps every stock Bar control section and appends its own', () => {
 
   // Anything the stock Bar chart can configure, this chart can too.
   expect(sections.slice(0, stockSections.length)).toEqual(stockSections);
-  expect(sections).toHaveLength(stockSections.length + 1);
-  expect(sections[sections.length - 1]).toMatchObject({
-    label: 'Series style rules',
-  });
+  // Everything this chart adds lives in one section, the way Superset's own
+  // panels group related controls behind subsection headers.
+  expect(sections.slice(stockSections.length).map(s => s?.label)).toEqual([
+    'Business chart styling',
+  ]);
+});
+
+test('the added section carries both the rules control and the chrome controls', () => {
+  const sections = controlPanel.controlPanelSections ?? [];
+  const added = sections[sections.length - 1];
+  // Rows are either a named control or a subsection header, which is a bare
+  // ReactElement with no `name`.
+  const names = (added?.controlSetRows ?? [])
+    .flat()
+    .filter(row => row !== null && typeof row === 'object' && 'name' in row)
+    .map(row => (row as { name: string }).name);
+
+  expect(names).toEqual([
+    'series_style_rules',
+    'show_gridlines',
+    'show_axis_ticks',
+    'show_value_axis_labels',
+    'show_category_axis_labels',
+    'axis_line_color',
+    'axis_line_width',
+  ]);
 });
 
 test('appending a section does not mutate the stock Bar control panel', () => {
@@ -54,7 +76,7 @@ test('appending a section does not mutate the stock Bar control panel', () => {
   expect(
     stockSections.some(
       (section: { label?: unknown } | null) =>
-        section?.label === 'Series style rules',
+        section?.label === 'Business chart styling',
     ),
   ).toBe(false);
 });
