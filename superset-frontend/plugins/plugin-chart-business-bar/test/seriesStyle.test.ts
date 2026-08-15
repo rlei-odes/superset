@@ -301,3 +301,23 @@ test('applies styling to a verbose-named series', () => {
     borderColor: '#1f77b4',
   });
 });
+
+test('matches a dimension value when a single metric leaves it alone in the name', () => {
+  // One metric plus a groupby: Superset drops the metric from the series name,
+  // so the whole name is the dimension value. Skipping segment 0 here left
+  // nothing to match and dimension rules quietly did nothing.
+  expect(matchesRuleKey('Plan', { kind: 'dimension', value: 'Plan' })).toBe(
+    true,
+  );
+});
+
+test('still ignores the metric segment when there is more than one', () => {
+  // Two metrics: segment 0 is the metric again, and a dimension rule must not
+  // match it.
+  expect(
+    matchesRuleKey('Plan, EMEA', { kind: 'dimension', value: 'Plan' }),
+  ).toBe(false);
+  expect(
+    matchesRuleKey('Revenue, Plan', { kind: 'dimension', value: 'Plan' }),
+  ).toBe(true);
+});

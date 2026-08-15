@@ -72,10 +72,20 @@ export function matchesRuleKey(
     });
   }
   if (key.kind === 'dimension') {
-    // Segment 0 is the metric; dimension values occupy the rest.
-    return splitSeriesName(seriesName)
-      .slice(1)
-      .includes(escapeSeparator(key.value));
+    /*
+     * Segment 0 is normally the metric, so dimension values occupy the rest —
+     * but only when there is more than one segment.
+     *
+     * With a *single* metric and a groupby, Superset drops the metric from the
+     * series name entirely: one metric grouped by `scenario` yields series
+     * named `Plan` and `Actual`, not `Revenue, Plan`. Skipping segment 0
+     * unconditionally therefore left nothing to match against, and dimension
+     * rules silently did nothing on exactly the shape they were designed for.
+     * Found on real data; the fixture used to test this had two metrics.
+     */
+    const segments = splitSeriesName(seriesName);
+    const candidates = segments.length > 1 ? segments.slice(1) : segments;
+    return candidates.includes(escapeSeparator(key.value));
   }
   try {
     return new RegExp(key.pattern).test(seriesName);

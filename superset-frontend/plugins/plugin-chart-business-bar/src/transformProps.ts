@@ -45,6 +45,35 @@ function orderSeries(
     return echartOptions;
   }
 
+  /*
+   * Stacked total labels are bound to series *positions*, not to series.
+   *
+   * `extractShowValueIndexes` (`utils/series.ts`) records which series index
+   * should carry the total for each data point, and the label formatter checks
+   * `params.seriesIndex === showValueIndexes[dataIndex]` — where `seriesIndex`
+   * is ECharts' runtime position but `showValueIndexes` was computed before
+   * this reorder. Moving a series therefore detaches the label: it renders on
+   * whichever series now sits at the recorded index, mid-stack, or not at all.
+   * Seen as missing labels and a total printed at the foot of a bar.
+   *
+   * That path is only reached with `stack && onlyTotal && showValue`, so the
+   * reorder is skipped just for that combination rather than everywhere.
+   * Correct labels matter more than stacking sequence, and where this pattern
+   * is used properly — one non-null series per period — the sequence is not
+   * visible anyway.
+   *
+   * The fuller fix is to recompute the label assignment after reordering, which
+   * means reproducing upstream's formatter decisions. Logged rather than done.
+   */
+  const { stack, onlyTotal, showValue } = chartProps.formData as {
+    stack?: unknown;
+    onlyTotal?: boolean;
+    showValue?: boolean;
+  };
+  if (stack && onlyTotal && showValue) {
+    return echartOptions;
+  }
+
   const metricLabels = getMetricOrder(chartProps.formData.metrics);
   if (metricLabels.length < 2) {
     return echartOptions;
