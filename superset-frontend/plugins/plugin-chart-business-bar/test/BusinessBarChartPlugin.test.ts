@@ -62,6 +62,7 @@ test('the added section carries both the rules control and the chrome controls',
 
   expect(names).toEqual([
     'series_style_rules',
+    'series_order_as_defined',
     'show_gridlines',
     'show_axis_ticks',
     'show_value_axis_labels',

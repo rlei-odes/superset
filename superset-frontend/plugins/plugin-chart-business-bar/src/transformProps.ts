@@ -22,7 +22,55 @@ import {
   TimeseriesTransformProps,
 } from '@superset-ui/plugin-chart-echarts';
 import { applyChartChrome, readChromeOptions } from './chrome';
+import {
+  getMetricOrder,
+  orderByMetrics,
+  readOrderByMetrics,
+} from './seriesOrder';
 import { applySeriesStyles, readSeriesStyleRules } from './seriesStyle';
+
+/**
+ * Restores the metric order across the series array and the legend.
+ *
+ * The legend has to be done separately: `legend.data` is built from `rawSeries`
+ * further up the transform (`Timeseries/transformProps.ts`, `sortedLegendData`)
+ * rather than derived from the finished series array, so reordering the series
+ * alone would leave the legend in the old order.
+ */
+function orderSeries(
+  chartProps: EchartsTimeseriesChartProps,
+  echartOptions: ReturnType<typeof TimeseriesTransformProps>['echartOptions'],
+) {
+  if (!readOrderByMetrics(chartProps)) {
+    return echartOptions;
+  }
+
+  const metricLabels = getMetricOrder(chartProps.formData.metrics);
+  if (metricLabels.length < 2) {
+    return echartOptions;
+  }
+
+  const verboseMap = chartProps.datasource?.verboseMap;
+  const { series, legend } = echartOptions as {
+    series?: unknown;
+    legend?: { data?: unknown };
+  };
+
+  return {
+    ...echartOptions,
+    ...(Array.isArray(series)
+      ? { series: orderByMetrics(series, metricLabels, verboseMap) }
+      : {}),
+    ...(legend && Array.isArray(legend.data)
+      ? {
+          legend: {
+            ...legend,
+            data: orderByMetrics(legend.data, metricLabels, verboseMap),
+          },
+        }
+      : {}),
+  };
+}
 
 /**
  * Applies role styling to the finished series array, or returns it untouched
@@ -88,7 +136,13 @@ export default function transformProps(
   return {
     ...transformed,
     echartOptions: applyChartChrome(
-      styleSeries(chartProps, transformed.echartOptions),
+      // Order first, then style: styling matches on series names and does not
+      // care about position, so the cheaper reorder happens on the smaller
+      // untouched array.
+      styleSeries(
+        chartProps,
+        orderSeries(chartProps, transformed.echartOptions),
+      ),
       readChromeOptions(chartProps),
       // Compared as a string rather than against `OrientationType`, which the
       // echarts package does not export from its index.

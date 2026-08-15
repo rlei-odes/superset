@@ -118,6 +118,32 @@ const businessStylingSection: ControlPanelSectionConfig = {
     ],
 
     /*
+     * Superset always sorts series and cannot be told not to: `sort_series_type`
+     * defaults to `'sum'`, and clearing it falls through to sorting by name
+     * rather than disabling the sort. There is no "as defined" choice, because
+     * the sorting happens in `extractSeries`, a layer that never sees the
+     * metric list.
+     *
+     * Defaulted on: a semantic sequence — Actual, Plan, Forecast — is the point
+     * of this chart type, and a value-sorted one reshuffles whenever the
+     * numbers move.
+     */
+    [
+      {
+        name: 'series_order_as_defined',
+        config: {
+          type: 'CheckboxControl',
+          label: t('Order series as defined'),
+          default: true,
+          renderTrigger: true,
+          description: t(
+            'Show series in the order the metrics are listed, instead of the order "Sort Series By" produces. Within one metric, groupby values keep their existing order.',
+          ),
+        },
+      },
+    ],
+
+    /*
      * Chrome subsection.
      *
      * All of this is hardcoded in the stock Timeseries transform, so none of it
