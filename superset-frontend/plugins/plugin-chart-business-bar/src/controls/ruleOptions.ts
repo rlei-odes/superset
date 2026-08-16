@@ -21,7 +21,7 @@ import {
   getMetricLabel,
   QueryFormMetric,
 } from '@superset-ui/core';
-import { splitSeriesName } from '../seriesStyle';
+import { matchesRuleKey, splitSeriesName } from '../seriesStyle';
 import { SeriesStyleRule, SeriesStyleRuleKey } from '../types';
 
 /** One choice in the rule's "applies to" dropdown. */
@@ -67,19 +67,41 @@ export function decodeRuleKey(encoded: string): SeriesStyleRuleKey | undefined {
 export function getMetricKeyOptions(
   metrics: QueryFormMetric | QueryFormMetric[] | undefined,
   verboseMap: Record<string, string> = {},
+  colnames?: string[],
 ): RuleKeyOption[] {
   const seen = new Set<string>();
-  return ensureIsArray(metrics)
+  const labels = ensureIsArray(metrics)
     .map(getMetricLabel)
     .filter(label => {
       if (!label || seen.has(label)) return false;
       seen.add(label);
       return true;
-    })
-    .map(label => ({
-      value: encodeRuleKey({ kind: 'metric', metric: label }),
-      label: verboseMap[label] ?? label,
-    }));
+    });
+
+  /*
+   * A metric rule matches a series *by name*, so it is only worth offering when
+   * the metric survives into the column names. With a single metric and
+   * *Truncate metric* on, Superset drops it — the columns are bare dimension
+   * values — and such a rule could never match anything. Offering it there is a
+   * dead choice that silently does nothing once picked.
+   *
+   * Several metrics keep their prefix (`Revenue, Actual`), as does a single
+   * untruncated one, so the ordinary wide shape is unaffected.
+   *
+   * Before the chart has run there are no column names to judge by, so every
+   * metric stays on offer: wide data must be configurable without first
+   * waiting for a query.
+   */
+  const isMatchable = (label: string) =>
+    !colnames?.length ||
+    colnames.some(colname =>
+      matchesRuleKey(colname, { kind: 'metric', metric: label }, verboseMap),
+    );
+
+  return labels.filter(isMatchable).map(label => ({
+    value: encodeRuleKey({ kind: 'metric', metric: label }),
+    label: verboseMap[label] ?? label,
+  }));
 }
 
 /**
@@ -94,16 +116,34 @@ export function getMetricKeyOptions(
  * Empty until the chart has run once, which is the honest state — before then
  * there is nothing to enumerate.
  */
+/**
+ * Dimension values offered as rule keys, read off the result's column names.
+ *
+ * `exclude` is the set of column names that are *not* series — the x-axis
+ * column, and the metric labels. It is what makes the single-segment case
+ * safe to read.
+ *
+ * Segment 0 is normally the metric, so dimension values occupy the rest. But
+ * with a single metric and *Truncate metric* on, Superset drops the metric from
+ * the name entirely: one metric grouped by `role` yields columns named `Actual`
+ * and `Plan`, not `Revenue, Actual`. Skipping segment 0 unconditionally
+ * therefore offered *nothing* on exactly the shape dimension rules exist for.
+ * `matchesRuleKey` already handles this; the options builder did not, so the
+ * rules could not be created in the first place.
+ */
 export function getDimensionKeyOptions(
   colnames: string[] = [],
+  exclude: string[] = [],
 ): RuleKeyOption[] {
+  const notSeries = new Set(exclude.filter(Boolean));
   const values = new Set<string>();
   colnames.forEach(colname => {
-    splitSeriesName(colname)
-      .slice(1)
-      .forEach(value => {
-        if (value) values.add(value);
-      });
+    if (notSeries.has(colname)) return;
+    const segments = splitSeriesName(colname);
+    const candidates = segments.length > 1 ? segments.slice(1) : segments;
+    candidates.forEach(value => {
+      if (value) values.add(value);
+    });
   });
   return [...values].map(value => ({
     value: encodeRuleKey({ kind: 'dimension', value }),

@@ -25,12 +25,18 @@ import {
   resolveStyle,
   splitSeriesName,
 } from '../src/seriesStyle';
-import { RoleThemeTokens, SeriesRole, SeriesStyleRule } from '../src/types';
+import {
+  getRoleDefaults,
+  RoleThemeTokens,
+  SeriesRole,
+  SeriesStyleRule,
+} from '../src/types';
 
-// Only the two tokens the plugin reads; real themes supply far more.
+// Only the tokens the plugin reads; real themes supply far more.
 const theme: RoleThemeTokens = {
   colorTextTertiary: '#8c8c8c',
   colorBgContainer: '#ffffff',
+  colorText: '#383838',
 };
 
 const metricRule = (metric: string, role: SeriesRole): SeriesStyleRule => ({
@@ -107,14 +113,24 @@ test('role defaults supply the fill style', () => {
   expect(
     resolveStyle(metricRule('m', SeriesRole.Forecast), theme).fillStyle,
   ).toBe('hatched');
-  // Only prior year pins a colour; the rest inherit the colour scheme.
+  // Colour is never a render-time fallback, for any role. The control seeds a
+  // role's colour into the rule instead, so that clearing it in the picker
+  // genuinely removes it rather than falling straight back to the role default.
   expect(
     resolveStyle(metricRule('m', SeriesRole.Actual), theme).color,
   ).toBeUndefined();
-  // Prior year takes its grey from the theme, so it follows dark mode.
-  expect(resolveStyle(metricRule('m', SeriesRole.PriorYear), theme).color).toBe(
-    theme.colorTextTertiary,
-  );
+  expect(
+    resolveStyle(metricRule('m', SeriesRole.PriorYear), theme).color,
+  ).toBeUndefined();
+});
+
+test('role seed colours follow the theme, so they track dark mode', () => {
+  // These are what the control writes into a new rule -- see getRoleDefaults.
+  const defaults = getRoleDefaults(theme);
+  expect(defaults[SeriesRole.PriorYear].color).toBe(theme.colorTextTertiary);
+  expect(defaults[SeriesRole.Actual].color).toBe(theme.colorText);
+  expect(defaults[SeriesRole.Forecast].color).toBe(theme.colorText);
+  expect(defaults[SeriesRole.Plan].color).toBe(theme.colorText);
 });
 
 test('an explicit rule value overrides the role default', () => {

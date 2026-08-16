@@ -76,24 +76,36 @@ export interface RoleThemeTokens {
   colorTextTertiary: string;
   /** Container background, used for the stripes cut through a hatched bar. */
   colorBgContainer: string;
+  /** Foreground ink, used for current-period bars. */
+  colorText: string;
 }
 
 /**
  * Role defaults, resolved against the theme so they follow light and dark mode.
  *
- * Only Prior Year pins a colour. For every other role the treatment (solid /
- * outline / hatched) carries the meaning and the colour is left to the scheme —
- * which is the entire point of the chart type: role and colour stay orthogonal.
- * Prior year is the exception because "last year, for reference" is conveyed by
- * desaturation, not by fill.
+ * The two halves are used differently, and the difference matters:
+ *
+ * - **`fillStyle` is a render-time fallback.** A rule that names no fill renders
+ *   with its role's treatment, and the control shows that as the Select's
+ *   placeholder. There is no need to opt out: every role has a sensible fill.
+ * - **`color` is only a *seed*.** The control writes it into the rule when a
+ *   role is chosen, so it lands in the saved value where it can be edited or
+ *   cleared. `resolveStyle` deliberately does **not** fall back to it, because
+ *   the clear button writes `undefined` — if the role colour were also a
+ *   fallback, "cleared" and "never set" would be the same state and the colour
+ *   could never actually be removed.
+ *
+ * The greyscale is deliberate: this chart type reserves colour for emphasis
+ * rather than for cycling categories, so the palette is not used to distinguish
+ * roles. A rule can still pin any colour it likes.
  */
 export function getRoleDefaults(
   theme: RoleThemeTokens,
 ): Record<SeriesRole, { fillStyle: FillStyle; color?: string }> {
   return {
-    [SeriesRole.Actual]: { fillStyle: 'solid' },
-    [SeriesRole.Plan]: { fillStyle: 'outline' },
-    [SeriesRole.Forecast]: { fillStyle: 'hatched' },
+    [SeriesRole.Actual]: { fillStyle: 'solid', color: theme.colorText },
+    [SeriesRole.Plan]: { fillStyle: 'outline', color: theme.colorText },
+    [SeriesRole.Forecast]: { fillStyle: 'hatched', color: theme.colorText },
     [SeriesRole.PriorYear]: {
       fillStyle: 'solid',
       color: theme.colorTextTertiary,

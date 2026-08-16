@@ -149,7 +149,15 @@ export function findRule(
   return rules.find(rule => matchesRuleKey(seriesName, rule.key, verboseMap));
 }
 
-/** Resolves a rule against its theme-derived role defaults. */
+/**
+ * Resolves a rule against its theme-derived role defaults.
+ *
+ * Fill falls back to the role's treatment; colour does not. The control seeds a
+ * role's colour into the rule itself, and its clear button writes `undefined` —
+ * so falling back here would make "cleared" indistinguishable from "never set"
+ * and the colour impossible to remove. An unset colour means exactly that: let
+ * the colour scheme decide.
+ */
 export function resolveStyle(
   rule: SeriesStyleRule,
   theme: RoleThemeTokens,
@@ -161,7 +169,7 @@ export function resolveStyle(
   const defaults = roleDefaults[rule.role] ?? roleDefaults.custom;
   return {
     fillStyle: rule.fillStyle ?? defaults.fillStyle,
-    color: rule.color ?? defaults.color,
+    color: rule.color,
   };
 }
 

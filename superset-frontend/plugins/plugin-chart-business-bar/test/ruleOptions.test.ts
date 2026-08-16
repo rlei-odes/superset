@@ -63,6 +63,56 @@ test('offers a rule key per metric on the chart', () => {
   ]);
 });
 
+test('drops a metric the query truncated out of the column names', () => {
+  // One metric grouped by a role column, with *Truncate metric* on: the series
+  // are named `Actual`/`Plan`, so a metric rule could never match one. Offering
+  // it would be a dead choice that silently does nothing.
+  expect(
+    getMetricKeyOptions(['SUM(revenue)'], {}, [
+      'period',
+      'Actual',
+      'Forecast',
+      'Plan',
+      'Previous',
+    ]),
+  ).toEqual([]);
+});
+
+test('keeps metrics that are still distinguishable in the column names', () => {
+  // Several metrics keep their prefix, which is the wide shape metric rules
+  // exist for. Both stay on offer.
+  expect(
+    getMetricKeyOptions(['SUM(actual)', 'SUM(plan)'], {}, [
+      'period',
+      'SUM(actual), EMEA',
+      'SUM(plan), EMEA',
+    ]),
+  ).toEqual([
+    { value: 'metric:SUM(actual)', label: 'SUM(actual)' },
+    { value: 'metric:SUM(plan)', label: 'SUM(plan)' },
+  ]);
+
+  // A single untruncated metric keeps its prefix too.
+  expect(
+    getMetricKeyOptions(['SUM(revenue)'], {}, [
+      'period',
+      'SUM(revenue), Actual',
+    ]),
+  ).toHaveLength(1);
+
+  // And with no groupby at all the column simply is the metric.
+  expect(
+    getMetricKeyOptions(['SUM(revenue)'], {}, ['period', 'SUM(revenue)']),
+  ).toHaveLength(1);
+});
+
+test('offers every metric before the chart has run', () => {
+  // Wide data must be configurable without first waiting for a query, so an
+  // empty column list means "cannot judge yet", not "nothing matches".
+  expect(getMetricKeyOptions(['SUM(revenue)'], {}, [])).toHaveLength(1);
+  expect(getMetricKeyOptions(['SUM(revenue)'])).toHaveLength(1);
+});
+
 test('shows a metric under its verbose name but stores its label', () => {
   // The legend shows the verbose name, so the dropdown has to as well or the
   // user cannot tell which series a row refers to. Matching still keys on the
@@ -103,7 +153,29 @@ test('offers no dimension values before the chart has run', () => {
 });
 
 test('offers no dimension values when the query has no groupby', () => {
-  expect(getDimensionKeyOptions(['SUM(sales)'])).toEqual([]);
+  // The metric label is passed as a non-series column, which is what tells a
+  // bare column name apart from a dimension value.
+  expect(getDimensionKeyOptions(['SUM(sales)'], ['SUM(sales)'])).toEqual([]);
+});
+
+test('offers dimension values for a single metric with the metric truncated', () => {
+  /*
+   * The shape dimension rules exist for, and the one that used to offer
+   * nothing: one metric grouped by a role column, with *Truncate metric* on,
+   * so Superset drops the metric from every column name. Without the x-axis
+   * column and the metric named as non-series, `period` would be offered as a
+   * role and the real values would be thrown away.
+   */
+  const options = getDimensionKeyOptions(
+    ['period', 'Actual', 'Forecast', 'Plan', 'Previous'],
+    ['period', 'Revenue'],
+  );
+  expect(options).toEqual([
+    { value: 'dimension:Actual', label: 'Actual' },
+    { value: 'dimension:Forecast', label: 'Forecast' },
+    { value: 'dimension:Plan', label: 'Plan' },
+    { value: 'dimension:Previous', label: 'Previous' },
+  ]);
 });
 
 test('describes keys the dropdown groups cannot offer', () => {

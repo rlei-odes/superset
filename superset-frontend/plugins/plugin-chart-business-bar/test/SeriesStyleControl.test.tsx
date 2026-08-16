@@ -17,10 +17,11 @@
  * under the License.
  */
 import { ComponentProps } from 'react';
+import { supersetTheme } from '@apache-superset/core/theme';
 import { render, screen, userEvent } from 'spec/helpers/testing-library';
 import Control from 'src/explore/components/Control';
 import SeriesStyleControl from '../src/controls/SeriesStyleControl';
-import { SeriesRole, SeriesStyleRule } from '../src/types';
+import { getRoleDefaults, SeriesRole, SeriesStyleRule } from '../src/types';
 
 const metricOptions = [
   { value: 'metric:SUM(sales)', label: 'Total sales' },
@@ -85,7 +86,14 @@ test('adding a rule seeds it with the first metric not already used', async () =
         key: { kind: 'metric', metric: 'SUM(sales)' },
         role: SeriesRole.Actual,
       },
-      { key: { kind: 'metric', metric: 'SUM(plan)' }, role: SeriesRole.Actual },
+      // The new rule carries its role's colour as a real value rather than
+      // inheriting one at render, which is what makes the picker's clear
+      // button able to remove it. The exact colour comes from the theme.
+      expect.objectContaining({
+        key: { kind: 'metric', metric: 'SUM(plan)' },
+        role: SeriesRole.Actual,
+        color: expect.any(String),
+      }),
     ],
     undefined,
   );
@@ -103,6 +111,75 @@ test('removing a rule drops just that rule', async () => {
   expect(setControlValue).toHaveBeenCalledWith(
     'series_style_rules',
     [{ key: { kind: 'metric', metric: 'SUM(plan)' }, role: SeriesRole.Plan }],
+    undefined,
+  );
+});
+
+test('changing the role re-seeds a colour the role itself had seeded', async () => {
+  // The rule carries Actual's seed colour, so it was never a deliberate pick
+  // and the new role is free to replace it.
+  const seeded = getRoleDefaults(supersetTheme).actual.color;
+  const { setControlValue } = renderControl([
+    {
+      key: { kind: 'metric', metric: 'SUM(sales)' },
+      role: SeriesRole.Actual,
+      color: seeded,
+    },
+  ]);
+
+  await userEvent.click(screen.getByRole('combobox', { name: 'Role' }));
+  await userEvent.click(await screen.findByText('Prior year'));
+
+  expect(setControlValue).toHaveBeenCalledWith(
+    'series_style_rules',
+    [
+      expect.objectContaining({
+        role: SeriesRole.PriorYear,
+        color: getRoleDefaults(supersetTheme).prior_year.color,
+      }),
+    ],
+    undefined,
+  );
+});
+
+test('changing the role keeps a colour the user chose', async () => {
+  const { setControlValue } = renderControl([
+    {
+      key: { kind: 'metric', metric: 'SUM(sales)' },
+      role: SeriesRole.Actual,
+      color: '#ff0000',
+    },
+  ]);
+
+  await userEvent.click(screen.getByRole('combobox', { name: 'Role' }));
+  await userEvent.click(await screen.findByText('Prior year'));
+
+  expect(setControlValue).toHaveBeenCalledWith(
+    'series_style_rules',
+    [expect.objectContaining({ role: SeriesRole.PriorYear, color: '#ff0000' })],
+    undefined,
+  );
+});
+
+test('changing the role leaves a cleared colour cleared', async () => {
+  // `undefined` means the user removed the colour with the picker's clear
+  // button. Re-seeding here would make that button impossible to use.
+  const { setControlValue } = renderControl([
+    { key: { kind: 'metric', metric: 'SUM(sales)' }, role: SeriesRole.Actual },
+  ]);
+
+  await userEvent.click(screen.getByRole('combobox', { name: 'Role' }));
+  await userEvent.click(await screen.findByText('Prior year'));
+
+  expect(setControlValue).toHaveBeenCalledWith(
+    'series_style_rules',
+    [
+      {
+        key: { kind: 'metric', metric: 'SUM(sales)' },
+        role: SeriesRole.PriorYear,
+        color: undefined,
+      },
+    ],
     undefined,
   );
 });

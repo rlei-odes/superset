@@ -47,7 +47,11 @@ const chartProps = (formData: Record<string, unknown> = {}) =>
     },
     rawFormData: {},
     datasource: {},
-    theme: { colorTextTertiary: '#888', colorBgContainer: '#fff' },
+    theme: {
+      colorTextTertiary: '#888',
+      colorBgContainer: '#fff',
+      colorText: '#383838',
+    },
     queriesData: [{ data: [] }],
   }) as any;
 

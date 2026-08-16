@@ -17,7 +17,13 @@
  * under the License.
  */
 import { t } from '@apache-superset/core/translation';
-import { QueryFormMetric } from '@superset-ui/core';
+import {
+  ensureIsArray,
+  getColumnLabel,
+  getMetricLabel,
+  QueryFormColumn,
+  QueryFormMetric,
+} from '@superset-ui/core';
 import {
   ControlPanelConfig,
   ControlPanelSectionConfig,
@@ -90,15 +96,33 @@ const businessStylingSection: ControlPanelSectionConfig = {
           mapStateToProps(state: ControlPanelState, _, chart) {
             const verboseMap = getVerboseMap(state?.datasource);
             const { colnames } = chart?.queriesResponse?.[0] ?? {};
+            const metrics = state?.controls?.metrics?.value as
+              | QueryFormMetric[]
+              | undefined;
 
             return {
+              /*
+               * Passing the column names lets a metric that the query
+               * truncated away be dropped, rather than offered as a rule that
+               * could never match. See `getMetricKeyOptions`.
+               */
               metricOptions: getMetricKeyOptions(
-                state?.controls?.metrics?.value as
-                  | QueryFormMetric[]
-                  | undefined,
+                metrics,
                 verboseMap,
+                colnames ?? [],
               ),
-              dimensionOptions: getDimensionKeyOptions(colnames ?? []),
+              /*
+               * The x-axis column and the metrics are columns too, but they are
+               * not series. Naming them lets a single truncated metric's
+               * columns — bare dimension values — be read without mistaking
+               * the axis for one.
+               */
+              dimensionOptions: getDimensionKeyOptions(colnames ?? [], [
+                getColumnLabel(
+                  state?.controls?.x_axis?.value as QueryFormColumn,
+                ),
+                ...ensureIsArray(metrics).map(getMetricLabel),
+              ]),
               /*
                * `colorByPrimaryAxis` colors each bar individually and drops
                * `itemStyle` from the series entirely, so role styling cannot
@@ -166,7 +190,9 @@ const businessStylingSection: ControlPanelSectionConfig = {
         config: {
           type: 'CheckboxControl',
           label: t('Gridlines'),
-          default: true,
+          // Off by default: this chart type exists for a sparse, high-data-ink
+          // look. Existing charts store their own value and are unaffected.
+          default: false,
           renderTrigger: true,
           description: t('Lines across the plot area, on the value axis.'),
         },
@@ -178,7 +204,7 @@ const businessStylingSection: ControlPanelSectionConfig = {
         config: {
           type: 'CheckboxControl',
           label: t('Axis ticks'),
-          default: true,
+          default: false,
           renderTrigger: true,
           description: t('The small marks along both axes.'),
         },
@@ -190,7 +216,7 @@ const businessStylingSection: ControlPanelSectionConfig = {
         config: {
           type: 'CheckboxControl',
           label: t('Value axis labels'),
-          default: true,
+          default: false,
           renderTrigger: true,
           description: t(
             'The numbers along the value axis. Often redundant when values are shown on the bars.',
@@ -216,6 +242,9 @@ const businessStylingSection: ControlPanelSectionConfig = {
         config: {
           type: 'ColorPickerControl',
           label: t('Axis line color'),
+          // A mid grey, deliberately readable against both a light and a dark
+          // background. Clearing it hands the line back to the theme.
+          default: { r: 147, g: 147, b: 147, a: 1 },
           renderTrigger: true,
           description: t(
             'Colors the axis line where it is drawn. Leave unset to follow the theme.',
@@ -230,6 +259,9 @@ const businessStylingSection: ControlPanelSectionConfig = {
           type: 'TextControl',
           label: t('Axis line width'),
           isInt: true,
+          // A baseline heavy enough to read as the chart's ground line, which
+          // is what carries the structure once gridlines are off.
+          default: 4,
           renderTrigger: true,
           description: t('Thickness of the axis line, in pixels.'),
         },

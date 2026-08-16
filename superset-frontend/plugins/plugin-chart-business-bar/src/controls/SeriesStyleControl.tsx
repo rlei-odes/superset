@@ -23,7 +23,12 @@ import { ControlHeader, ControlHeaderProps } from '@superset-ui/chart-controls';
 import { Button, ColorPicker, Select } from '@superset-ui/core/components';
 import { Icons } from '@superset-ui/core/components/Icons';
 import { parseSeriesStyleRules, resolveStyle } from '../seriesStyle';
-import { FillStyle, SeriesRole, SeriesStyleRule } from '../types';
+import {
+  FillStyle,
+  getRoleDefaults,
+  SeriesRole,
+  SeriesStyleRule,
+} from '../types';
 import {
   decodeRuleKey,
   encodeRuleKey,
@@ -161,10 +166,24 @@ export default function SeriesStyleControl({
   const seedOption = getUnclaimedOption(rules, metricOptions, dimensionOptions);
   const hasSeries = metricOptions.length > 0 || dimensionOptions.length > 0;
 
+  /**
+   * The colour a role starts life with. Seeded into the rule rather than
+   * applied at render, so it shows up in the picker as a real value the user
+   * can change or clear. See the note on `getRoleDefaults`.
+   */
+  const seedColor = (role: SeriesRole) => getRoleDefaults(theme)[role]?.color;
+
   const addRule = () => {
     const key = seedOption && decodeRuleKey(seedOption.value);
     if (!key) return;
-    commit([...rules, { key, role: SeriesRole.Actual }]);
+    commit([
+      ...rules,
+      {
+        key,
+        role: SeriesRole.Actual,
+        color: seedColor(SeriesRole.Actual),
+      },
+    ]);
   };
 
   return (
@@ -217,9 +236,17 @@ export default function SeriesStyleControl({
                   ariaLabel={t('Role')}
                   value={rule.role}
                   options={roleOptions}
-                  onChange={next =>
-                    updateRule(index, { role: next as SeriesRole })
-                  }
+                  onChange={next => {
+                    const role = next as SeriesRole;
+                    // Re-seed only a colour that the previous role seeded.
+                    // A colour the user picked is kept, and one they cleared
+                    // stays cleared -- neither is theirs to overwrite.
+                    const color =
+                      rule.color === seedColor(rule.role)
+                        ? seedColor(role)
+                        : rule.color;
+                    updateRule(index, { role, color });
+                  }}
                   allowClear={false}
                 />
                 <Select
