@@ -21,13 +21,13 @@ import {
   EchartsTimeseriesSeriesType,
   TimeseriesTransformProps,
 } from '@superset-ui/plugin-chart-echarts';
-import { applyChartChrome, readChromeOptions } from './chrome';
+import { applyChartChrome, readChromeOptions } from '../shared/chrome';
 import {
   getMetricOrder,
   orderByMetrics,
   readOrderByMetrics,
-} from './seriesOrder';
-import { applySeriesStyles, readSeriesStyleRules } from './seriesStyle';
+} from '../shared/seriesOrder';
+import { applySeriesStyles, readSeriesStyleRules } from '../shared/seriesStyle';
 
 /**
  * Restores the metric order across the series array and the legend.

@@ -1,7 +1,7 @@
 {
-  "name": "@superset-ui/plugin-chart-business-bar",
+  "name": "@superset-ui/plugin-chart-business-charts",
   "version": "0.0.1",
-  "description": "Superset Chart - Business Bar (role-based series styling)",
+  "description": "Superset Charts - business reporting charts with role-based series styling",
   "keywords": [
     "business-charts",
     "ibcs",

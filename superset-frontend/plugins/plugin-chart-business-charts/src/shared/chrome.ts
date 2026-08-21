@@ -54,6 +54,8 @@ export interface ChromeOptions {
   /** `ColorPickerControl` returns a hex string or an `{r,g,b,a}` object. */
   axisLineColor?: string | RgbColor;
   axisLineWidth?: number;
+  /** Drop value labels that would collide rather than overprinting them. */
+  hideOverlappingLabels?: boolean;
 }
 
 export interface RgbColor {
@@ -120,9 +122,51 @@ function applyToAxis(
   return next;
 }
 
+/**
+ * Applies {@link applyToAxis} to one axis or to a list of them.
+ *
+ * The Mixed chart declares `yAxis` as a two-entry array — a primary and a
+ * secondary value axis — where the Bar chart declares a single object. Both are
+ * value axes and both should answer to the same controls, so hiding the value
+ * axis labels has to reach the secondary one too or the sparse look is only
+ * half applied.
+ */
+function applyToAxes<T extends AxisOption | AxisOption[] | undefined>(
+  axis: T,
+  patch: Parameters<typeof applyToAxis>[1],
+): T {
+  if (Array.isArray(axis)) {
+    return axis.map(entry => applyToAxis(entry, patch)) as T;
+  }
+  return applyToAxis(axis, patch) as T;
+}
+
+/**
+ * Lets ECharts drop a value label rather than overprint one already drawn.
+ *
+ * `labelLayout.hideOverlap` is per series and ECharts resolves collisions
+ * across all of them at once, so every series has to opt in or the ones left
+ * out keep printing over the top of the rest. Upstream sets it on *axis* labels
+ * (`axisLabel.hideOverlap`, in both the Timeseries and Mixed transforms) but
+ * never on series labels, which is why a line's values collide with the bars
+ * beneath them.
+ *
+ * This only ever hides; which label survives a collision is ECharts' call and
+ * is not steerable from here. Thinning labels deliberately — the last value of
+ * a series, one value per flat run — is a different and larger job.
+ */
+function applyLabelLayout<T>(series: T[]): T[] {
+  return series.map(entry =>
+    entry && typeof entry === 'object'
+      ? { ...entry, labelLayout: { hideOverlap: true } }
+      : entry,
+  );
+}
+
 export interface ChromeableOptions {
-  xAxis?: AxisOption;
-  yAxis?: AxisOption;
+  xAxis?: AxisOption | AxisOption[];
+  yAxis?: AxisOption | AxisOption[];
+  series?: unknown;
   [key: string]: unknown;
 }
 
@@ -165,8 +209,11 @@ export function applyChartChrome<T extends ChromeableOptions>(
 
   return {
     ...echartOptions,
-    xAxis: applyToAxis(echartOptions.xAxis, xPatch),
-    yAxis: applyToAxis(echartOptions.yAxis, yPatch),
+    xAxis: applyToAxes(echartOptions.xAxis, xPatch),
+    yAxis: applyToAxes(echartOptions.yAxis, yPatch),
+    ...(chrome.hideOverlappingLabels && Array.isArray(echartOptions.series)
+      ? { series: applyLabelLayout(echartOptions.series) }
+      : {}),
   };
 }
 
@@ -210,6 +257,10 @@ export function readChromeOptions(chartProps: {
       'axisLineColor',
       'axis_line_color',
     ) as ChromeOptions['axisLineColor'],
+    hideOverlappingLabels: read(
+      'hideOverlappingLabels',
+      'hide_overlapping_labels',
+    ) as boolean | undefined,
     // A half-typed number in the control must not produce NaN in the option.
     axisLineWidth: Number.isFinite(parsedWidth)
       ? (parsedWidth as number)

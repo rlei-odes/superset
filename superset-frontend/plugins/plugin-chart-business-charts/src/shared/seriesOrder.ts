@@ -127,6 +127,55 @@ export function orderByMetrics<T>(
   return next;
 }
 
+/** What `transformSeries` stamps on each series to record its query. */
+interface QueryTagged {
+  queryIndex?: number;
+}
+
+/**
+ * Reorders a two-query chart's series, each query against its own metric list.
+ *
+ * The Mixed chart holds two independent metric lists, so "the order the metrics
+ * are listed" is two orders, not one. Running a single concatenated list over
+ * the whole array would let a metric that appears in *both* queries — the
+ * ordinary Z-chart shape, where query A is the monthly figure and query B its
+ * cumulative — match at the same rank in both and swap a line into a bar's
+ * slot.
+ *
+ * Partitioning on `queryIndex` is what keeps that honest. `transformSeries`
+ * stamps it on every series it builds, and the annotation and formula layers
+ * pushed into the same array carry none — so they match no partition and are
+ * left exactly where they are, which is the same guarantee
+ * {@link orderByMetrics} gives within one query.
+ */
+export function orderByQueryMetrics<T extends QueryTagged>(
+  entries: T[],
+  metricLabelsByQuery: string[][],
+  verboseMap: Record<string, string> = {},
+): T[] {
+  return metricLabelsByQuery.reduce((current, metricLabels, queryIndex) => {
+    if (!metricLabels.length) return current;
+
+    const slots: number[] = [];
+    current.forEach((entry, position) => {
+      if (entry?.queryIndex === queryIndex) slots.push(position);
+    });
+    if (slots.length < 2) return current;
+
+    const ordered = orderByMetrics(
+      slots.map(slot => current[slot]),
+      metricLabels,
+      verboseMap,
+    );
+
+    const next = [...current];
+    slots.forEach((slot, index) => {
+      next[slot] = ordered[index];
+    });
+    return next;
+  }, entries);
+}
+
 /**
  * Whether metric order should be restored. Defaults to on: the semantic
  * sequence is the point of this chart type, and a value-sorted one is what the

@@ -19,6 +19,7 @@
 import {
   FillStyle,
   getRoleDefaults,
+  LineType,
   RoleThemeTokens,
   SeriesStyleRule,
   SeriesStyleRuleKey,
@@ -31,12 +32,29 @@ import {
  * Verified against `superset/utils/pandas_postprocessing`: the separator is
  * `FLAT_COLUMN_SEPARATOR = ", "` (utils.py) and the escaping is
  * `str.replace(",", "\\,")` (`escape_separator`). Metric comes first.
+ *
+ * Mirrors that escaping, so rule values compare like for like.
  */
-const SEPARATOR = ', ';
-
-/** Mirrors Python's `escape_separator`, so rule values compare like for like. */
 export function escapeSeparator(value: string): string {
-  return value.replace(',', '\\,');
+  // Every comma, not just the first: Python's `str.replace` has no count limit,
+  // so `AVG(a, b, c)` arrives escaped twice over.
+  return value.replaceAll(',', '\\,');
+}
+
+/**
+ * Drops the `" (Query A)"` the Mixed chart appends when *Show query
+ * identifiers* is on.
+ *
+ * `MixedTimeseries/transformProps.ts` builds a series name as
+ * `"<metric> (Query A), <dimension>"`, or as `"<metric> (Query A)"` with no
+ * groupby, from a hardcoded English literal. The suffix belongs to the metric
+ * part, so it lands exactly where a metric rule tries to match and turns every
+ * rule into a silent no-op the moment the checkbox is ticked. Stripped rather
+ * than warned about: which query a series came from is not something a rule
+ * should have to know.
+ */
+export function stripQueryIdentifier(segment: string): string {
+  return segment.replace(/ \(Query [AB]\)$/, '');
 }
 
 /** Splits on the separator without breaking on escaped commas. */
@@ -65,11 +83,18 @@ export function matchesRuleKey(
   verboseMap: Record<string, string> = {},
 ): boolean {
   if (key.kind === 'metric') {
+    /*
+     * Segment 0 is the metric, whether or not a groupby follows. Comparing the
+     * whole segment rather than testing a prefix is what makes the Mixed
+     * chart's query identifier strippable at all — a prefix test has nothing to
+     * strip the suffix off.
+     */
+    const [head = ''] = splitSeriesName(seriesName);
+    const metricPart = stripQueryIdentifier(head);
     const aliases = [key.metric, verboseMap[key.metric]].filter(Boolean);
-    return aliases.some(alias => {
-      const metric = escapeSeparator(alias as string);
-      return seriesName === metric || seriesName.startsWith(metric + SEPARATOR);
-    });
+    return aliases.some(
+      alias => metricPart === escapeSeparator(alias as string),
+    );
   }
   if (key.kind === 'dimension') {
     /*
@@ -163,12 +188,14 @@ export function resolveStyle(
   theme: RoleThemeTokens,
 ): {
   fillStyle: FillStyle;
+  lineType: LineType;
   color?: string;
 } {
   const roleDefaults = getRoleDefaults(theme);
   const defaults = roleDefaults[rule.role] ?? roleDefaults.custom;
   return {
     fillStyle: rule.fillStyle ?? defaults.fillStyle,
+    lineType: rule.lineType ?? defaults.lineType,
     color: rule.color,
   };
 }
@@ -215,6 +242,34 @@ export function buildItemStyle(
 }
 
 /**
+ * Builds the ECharts `lineStyle` for a resolved rule — the line's counterpart to
+ * {@link buildItemStyle}.
+ *
+ * `type` is written straight through: ECharts names the dash patterns
+ * `'solid' | 'dashed' | 'dotted'`, which is why {@link LineType} uses those
+ * exact strings.
+ *
+ * The colour is set explicitly rather than left to ECharts' `'auto'`, which
+ * resolves a line's colour from the series' fill. That indirection holds for a
+ * stock line but not here: a Superset line series with an `'item'` tooltip
+ * trigger carries `itemStyle.opacity = 0` — a hack in `transformSeries` that
+ * keeps the invisible symbols hit-testable for cross-filtering — so leaning on
+ * the fill to colour the stroke means leaning on a value that exists for an
+ * unrelated reason.
+ */
+export function buildLineStyle(
+  lineType: LineType,
+  color: string | undefined,
+  baseColor: string | undefined,
+): Record<string, unknown> {
+  const effective = color ?? baseColor;
+  return {
+    type: lineType,
+    ...(effective ? { color: effective } : {}),
+  };
+}
+
+/**
  * ECharts brightens bars on hover by default, which would make an outline bar
  * flash solid. Restating the resolved style as the emphasis style pins it.
  */
@@ -228,9 +283,25 @@ function buildEmphasisItemStyle(
   return { ...itemStyle };
 }
 
+/**
+ * Whether a series is drawn with a stroke rather than a fill, and so takes the
+ * line treatment.
+ *
+ * `scatter` is included because it has no fill to hollow out either — a rule
+ * reaches it only to pin a colour. Note this catches a *bar* chart's forecast
+ * confidence bands too, which `transformSeries` plots as lines; before, an
+ * outline rule turned their `itemStyle` transparent and erased the band.
+ */
+function isStroked(type: string | undefined): boolean {
+  return type === 'line' || type === 'scatter';
+}
+
 export interface StylableSeries {
   name?: string;
+  /** ECharts' resolved plot type: `'bar'`, `'line'` or `'scatter'`. */
+  type?: string;
   itemStyle?: { color?: string; [key: string]: unknown };
+  lineStyle?: Record<string, unknown>;
   emphasis?: { itemStyle?: Record<string, unknown>; [key: string]: unknown };
   [key: string]: unknown;
 }
@@ -257,13 +328,46 @@ export function applySeriesStyles<T extends StylableSeries>(
       return entry;
     }
 
-    const { fillStyle, color } = resolveStyle(rule, theme);
-    const itemStyle = buildItemStyle(
-      fillStyle,
-      color,
-      entry.itemStyle?.color,
-      theme,
-    );
+    const { fillStyle, lineType, color } = resolveStyle(rule, theme);
+    const baseColor = entry.itemStyle?.color;
+
+    /*
+     * A rule dresses whichever shape the series turned out to be. In a mixed
+     * chart both shapes are present at once and one rule covers both, which is
+     * why the branch is on the series rather than on the chart.
+     *
+     * `type` is ECharts' resolved plot type, written by `transformSeries` —
+     * `'bar'`, `'line'` or `'scatter'`. Stroked shapes take the line treatment:
+     * applying a fill treatment to a line would set `color: 'transparent'` for
+     * an outline role and erase it.
+     *
+     * Tested positively, so a series with no `type` at all falls through to the
+     * fill branch. That is what a bare fixture looks like, and it keeps the bar
+     * chart — where every series but a forecast band is a bar — behaving as it
+     * did before lines existed.
+     */
+    if (isStroked(entry.type)) {
+      /*
+       * `emphasis` is deliberately left alone here, unlike on the bar branch.
+       * ECharts keeps a line's dash pattern through its hover state anyway, so
+       * there is nothing to pin — and `transformSeries` puts
+       * `emphasis.itemStyle.opacity = 1` on a line whose symbols are hidden for
+       * cross-filter hit-testing. Restating the resolved style over it would
+       * write the hidden `opacity: 0` back and take the affordance away.
+       */
+      return {
+        ...entry,
+        lineStyle: {
+          ...entry.lineStyle,
+          ...buildLineStyle(lineType, color, baseColor),
+        },
+        // The symbols follow the line, so a rule that pins a colour has to
+        // reach both. A rule that pins none leaves the scheme's colour alone.
+        ...(color ? { itemStyle: { ...entry.itemStyle, color } } : {}),
+      };
+    }
+
+    const itemStyle = buildItemStyle(fillStyle, color, baseColor, theme);
 
     return {
       ...entry,

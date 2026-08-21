@@ -37,7 +37,7 @@ jest.mock('@superset-ui/plugin-chart-echarts', () => ({
 }));
 
 // eslint-disable-next-line import/first
-import transformProps from '../src/transformProps';
+import transformProps from '../../src/Bar/transformProps';
 
 const chartProps = (formData: Record<string, unknown> = {}) =>
   ({

@@ -19,8 +19,9 @@
 import {
   getMetricOrder,
   orderByMetrics,
+  orderByQueryMetrics,
   readOrderByMetrics,
-} from '../src/seriesOrder';
+} from '../../src/shared/seriesOrder';
 
 const named = (...names: string[]) => names.map(name => ({ name }));
 const namesOf = (entries: { name: string }[]) => entries.map(e => e.name);
@@ -123,4 +124,75 @@ test('defaults to on, and only an explicit false turns it off', () => {
       rawFormData: { series_order_as_defined: false },
     }),
   ).toBe(false);
+});
+
+const tagged = (queryIndex: number, ...names: string[]) =>
+  names.map(name => ({ name, queryIndex }));
+
+test('orders each query against its own metric list', () => {
+  const series = [
+    ...tagged(0, 'sum_revenue', 'sum_cost'),
+    ...tagged(1, 'cum_cost', 'cum_revenue'),
+  ];
+  const result = orderByQueryMetrics(series, [
+    ['sum_cost', 'sum_revenue'],
+    ['cum_revenue', 'cum_cost'],
+  ]);
+
+  expect(namesOf(result)).toEqual([
+    'sum_cost',
+    'sum_revenue',
+    'cum_revenue',
+    'cum_cost',
+  ]);
+});
+
+test('does not move a series across queries when both share a metric', () => {
+  // The Z-chart shape: the same metric is query A's monthly bar and query B's
+  // cumulative line. Ranked against one concatenated list they would tie, and
+  // the line could be written into the bar's slot.
+  const series = [
+    ...tagged(0, 'plan', 'actual'),
+    ...tagged(1, 'plan', 'actual'),
+  ];
+  const result = orderByQueryMetrics(series, [
+    ['actual', 'plan'],
+    ['actual', 'plan'],
+  ]);
+
+  expect(result.map(e => `${e.name}:${e.queryIndex}`)).toEqual([
+    'actual:0',
+    'plan:0',
+    'actual:1',
+    'plan:1',
+  ]);
+});
+
+test('leaves untagged entries where they are', () => {
+  // Annotation and formula layers are pushed into the same array and carry no
+  // queryIndex, so they belong to no partition.
+  const series = [
+    { name: 'Formula', queryIndex: undefined },
+    ...tagged(0, 'sum_revenue', 'sum_cost'),
+  ];
+  const result = orderByQueryMetrics(series, [['sum_cost', 'sum_revenue'], []]);
+
+  expect(namesOf(result)).toEqual(['Formula', 'sum_cost', 'sum_revenue']);
+});
+
+test('an empty metric list leaves that query alone', () => {
+  // How the transform suppresses ordering for a stacked, total-labelled query
+  // without disturbing the other one.
+  const series = [
+    ...tagged(0, 'sum_revenue', 'sum_cost'),
+    ...tagged(1, 'cum_cost', 'cum_revenue'),
+  ];
+  const result = orderByQueryMetrics(series, [[], ['cum_revenue', 'cum_cost']]);
+
+  expect(namesOf(result)).toEqual([
+    'sum_revenue',
+    'sum_cost',
+    'cum_revenue',
+    'cum_cost',
+  ]);
 });

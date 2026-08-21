@@ -16,7 +16,11 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { applyChartChrome, readChromeOptions, toCssColor } from '../src/chrome';
+import {
+  applyChartChrome,
+  readChromeOptions,
+  toCssColor,
+} from '../../src/shared/chrome';
 
 const options = () => ({
   xAxis: {
@@ -130,4 +134,41 @@ test('ignores a half-typed axis width rather than emitting NaN', () => {
     readChromeOptions({ formData: { axisLineWidth: 'x' } }).axisLineWidth,
   ).toBeUndefined();
   expect(readChromeOptions({}).axisLineWidth).toBeUndefined();
+});
+
+test('hides overlapping value labels on every series when asked', () => {
+  // Every series has to opt in: ECharts resolves label collisions across all of
+  // them at once, so one left out keeps printing over the rest.
+  const options = {
+    series: [
+      { name: 'a', type: 'bar' },
+      { name: 'b', type: 'line' },
+    ],
+    xAxis: {},
+    yAxis: {},
+  };
+  const result = applyChartChrome(options, { hideOverlappingLabels: true });
+
+  expect(result.series).toEqual([
+    { name: 'a', type: 'bar', labelLayout: { hideOverlap: true } },
+    { name: 'b', type: 'line', labelLayout: { hideOverlap: true } },
+  ]);
+});
+
+test('leaves the series alone when not asked', () => {
+  // Off means stock behaviour: upstream writes no labelLayout at all.
+  const series = [{ name: 'a' }];
+  const result = applyChartChrome({ series, xAxis: {}, yAxis: {} }, {});
+  expect(result.series).toBe(series);
+});
+
+test('reads the overlap flag from either casing', () => {
+  expect(
+    readChromeOptions({ formData: { hideOverlappingLabels: true } })
+      .hideOverlappingLabels,
+  ).toBe(true);
+  expect(
+    readChromeOptions({ rawFormData: { hide_overlapping_labels: true } })
+      .hideOverlappingLabels,
+  ).toBe(true);
 });

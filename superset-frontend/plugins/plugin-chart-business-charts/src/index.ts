@@ -16,5 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-export { default as BusinessBarChartPlugin } from './plugin/BusinessBarChartPlugin';
-export * from './types';
+export { default as BusinessBarChartPlugin } from './Bar/BusinessBarChartPlugin';
+export { default as BusinessMixedChartPlugin } from './Mixed/BusinessMixedChartPlugin';
+export * from './shared/types';

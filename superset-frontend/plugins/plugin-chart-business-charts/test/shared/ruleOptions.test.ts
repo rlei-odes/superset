@@ -24,8 +24,12 @@ import {
   getMetricKeyOptions,
   getSeriesOptionGroups,
   getUnclaimedOption,
-} from '../src/controls/ruleOptions';
-import { SeriesRole, SeriesStyleRule, SeriesStyleRuleKey } from '../src/types';
+} from '../../src/shared/controls/ruleOptions';
+import {
+  SeriesRole,
+  SeriesStyleRule,
+  SeriesStyleRuleKey,
+} from '../../src/shared/types';
 
 test('round-trips each kind of rule key through the Select value', () => {
   const keys: SeriesStyleRuleKey[] = [

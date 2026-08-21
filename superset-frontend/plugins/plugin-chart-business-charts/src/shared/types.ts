@@ -34,6 +34,19 @@ export enum SeriesRole {
 export type FillStyle = 'solid' | 'outline' | 'hatched';
 
 /**
+ * How a line is stroked — the line's equivalent of {@link FillStyle}.
+ *
+ * A separate axis rather than a widening of `FillStyle`, because in a mixed
+ * chart the *same* role appears as both shapes at once: the Z chart plots
+ * monthly Plan as a bar and cumulative Plan as a line, and one rule has to
+ * dress both. Collapsing the two into one field would force a rule to choose
+ * which of its two series it styles.
+ *
+ * ECharts' `lineStyle.type` accepts these three names directly.
+ */
+export type LineType = 'solid' | 'dashed' | 'dotted';
+
+/**
  * How a rule identifies the series it applies to.
  *
  * A tagged union rather than a bare series-name string. Superset composes series
@@ -58,12 +71,14 @@ export interface SeriesStyleRule {
   role: SeriesRole;
   /** Overrides the role default. Omit to inherit the colour scheme's colour. */
   color?: string;
-  /** Overrides the role default. */
+  /** Overrides the role default, on series drawn as bars. */
   fillStyle?: FillStyle;
+  /** Overrides the role default, on series drawn as lines. */
+  lineType?: LineType;
 }
 
-/** Form data this plugin adds on top of the stock Bar chart's. */
-export interface BusinessBarFormData {
+/** Form data these charts add on top of their stock counterparts'. */
+export interface BusinessChartFormData {
   series_style_rules?: SeriesStyleRule[];
 }
 
@@ -85,9 +100,10 @@ export interface RoleThemeTokens {
  *
  * The two halves are used differently, and the difference matters:
  *
- * - **`fillStyle` is a render-time fallback.** A rule that names no fill renders
- *   with its role's treatment, and the control shows that as the Select's
- *   placeholder. There is no need to opt out: every role has a sensible fill.
+ * - **`fillStyle` and `lineType` are render-time fallbacks.** A rule that names
+ *   neither renders with its role's treatment for whichever shape the series
+ *   turned out to be, and the control shows that as the Select's placeholder.
+ *   There is no need to opt out: every role has a sensible pair.
  * - **`color` is only a *seed*.** The control writes it into the rule when a
  *   role is chosen, so it lands in the saved value where it can be edited or
  *   cleared. `resolveStyle` deliberately does **not** fall back to it, because
@@ -99,17 +115,42 @@ export interface RoleThemeTokens {
  * rather than for cycling categories, so the palette is not used to distinguish
  * roles. A rule can still pin any colour it likes.
  */
-export function getRoleDefaults(
-  theme: RoleThemeTokens,
-): Record<SeriesRole, { fillStyle: FillStyle; color?: string }> {
+export function getRoleDefaults(theme: RoleThemeTokens): Record<
+  SeriesRole,
+  {
+    fillStyle: FillStyle;
+    lineType: LineType;
+    color?: string;
+  }
+> {
+  /*
+   * The fill and the line treatment say the same thing in two vocabularies:
+   * a solid bar and a solid line are both "this happened"; a hollow bar and a
+   * dashed line are both "this is intended"; a hatched bar and a dotted line
+   * are both "this is a guess". A Z chart shows a role as both shapes at once,
+   * so the pair has to read as one statement rather than two.
+   */
   return {
-    [SeriesRole.Actual]: { fillStyle: 'solid', color: theme.colorText },
-    [SeriesRole.Plan]: { fillStyle: 'outline', color: theme.colorText },
-    [SeriesRole.Forecast]: { fillStyle: 'hatched', color: theme.colorText },
+    [SeriesRole.Actual]: {
+      fillStyle: 'solid',
+      lineType: 'solid',
+      color: theme.colorText,
+    },
+    [SeriesRole.Plan]: {
+      fillStyle: 'outline',
+      lineType: 'dashed',
+      color: theme.colorText,
+    },
+    [SeriesRole.Forecast]: {
+      fillStyle: 'hatched',
+      lineType: 'dotted',
+      color: theme.colorText,
+    },
     [SeriesRole.PriorYear]: {
       fillStyle: 'solid',
+      lineType: 'solid',
       color: theme.colorTextTertiary,
     },
-    [SeriesRole.Custom]: { fillStyle: 'solid' },
+    [SeriesRole.Custom]: { fillStyle: 'solid', lineType: 'solid' },
   };
 }

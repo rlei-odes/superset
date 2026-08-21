@@ -20,8 +20,12 @@ import { ComponentProps } from 'react';
 import { supersetTheme } from '@apache-superset/core/theme';
 import { render, screen, userEvent } from 'spec/helpers/testing-library';
 import Control from 'src/explore/components/Control';
-import SeriesStyleControl from '../src/controls/SeriesStyleControl';
-import { getRoleDefaults, SeriesRole, SeriesStyleRule } from '../src/types';
+import SeriesStyleControl from '../../src/shared/controls/SeriesStyleControl';
+import {
+  getRoleDefaults,
+  SeriesRole,
+  SeriesStyleRule,
+} from '../../src/shared/types';
 
 const metricOptions = [
   { value: 'metric:SUM(sales)', label: 'Total sales' },
@@ -40,7 +44,10 @@ const dimensionOptions = [{ value: 'dimension:EMEA', label: 'EMEA' }];
  * whole rule-row UI depends on it. Rendering the bare component would prove
  * nothing about it.
  */
-function renderControl(value: SeriesStyleRule[] | string = []) {
+function renderControl(
+  value: SeriesStyleRule[] | string = [],
+  extraProps: Record<string, unknown> = {},
+) {
   const setControlValue = jest.fn();
   // `ControlProps` lists only the fields `Control` itself reads. Anything
   // `mapStateToProps` returns — here the two option lists — reaches the
@@ -55,6 +62,7 @@ function renderControl(value: SeriesStyleRule[] | string = []) {
     actions: { setControlValue },
     metricOptions,
     dimensionOptions,
+    ...extraProps,
   } as unknown as ComponentProps<typeof Control>;
 
   render(<Control {...props} />);
@@ -272,4 +280,51 @@ test('falls back to a dimension value when only those are left uncovered', async
 
   const added = setControlValue.mock.calls[0][1].at(-1);
   expect(added.key).toEqual({ kind: 'dimension', value: 'EMEA' });
+});
+
+test('offers no line treatment unless the chart can draw one', () => {
+  // The Bar chart draws only bars, so a Line dropdown there would be a control
+  // that provably does nothing.
+  renderControl([
+    { key: { kind: 'metric', metric: 'SUM(plan)' }, role: SeriesRole.Plan },
+  ]);
+
+  expect(screen.getByLabelText('Fill')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Line')).not.toBeInTheDocument();
+});
+
+test('offers a line treatment beside the fill one when asked', () => {
+  renderControl(
+    [{ key: { kind: 'metric', metric: 'SUM(plan)' }, role: SeriesRole.Plan }],
+    { showLineType: true },
+  );
+
+  expect(screen.getByLabelText('Fill')).toBeInTheDocument();
+  expect(screen.getByLabelText('Line')).toBeInTheDocument();
+});
+
+test("both treatment dropdowns show the role's default as a placeholder", async () => {
+  renderControl(
+    [{ key: { kind: 'metric', metric: 'SUM(plan)' }, role: SeriesRole.Plan }],
+    { showLineType: true },
+  );
+
+  // Plan is outline for a bar and dashed for a line — one statement in two
+  // vocabularies. Neither is stored on the rule, so both show as placeholders.
+  expect(await screen.findByText('Outline')).toBeInTheDocument();
+  expect(await screen.findByText('Dashed')).toBeInTheDocument();
+});
+
+test('captions every field, so two dropdowns reading "Solid" are tellable apart', () => {
+  // Without captions the row reads "Actual, Solid, Solid, black" — two of the
+  // four the same word, one meaning the bar's fill and the other the line's
+  // stroke. Reported from the browser.
+  renderControl(
+    [{ key: { kind: 'metric', metric: 'SUM(plan)' }, role: SeriesRole.Plan }],
+    { showLineType: true },
+  );
+
+  ['Series', 'Role', 'Fill', 'Line', 'Color'].forEach(caption => {
+    expect(screen.getByText(caption)).toBeInTheDocument();
+  });
 });

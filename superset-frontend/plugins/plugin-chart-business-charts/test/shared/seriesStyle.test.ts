@@ -24,13 +24,13 @@ import {
   readSeriesStyleRules,
   resolveStyle,
   splitSeriesName,
-} from '../src/seriesStyle';
+} from '../../src/shared/seriesStyle';
 import {
   getRoleDefaults,
   RoleThemeTokens,
   SeriesRole,
   SeriesStyleRule,
-} from '../src/types';
+} from '../../src/shared/types';
 
 // Only the tokens the plugin reads; real themes supply far more.
 const theme: RoleThemeTokens = {
@@ -142,7 +142,23 @@ test('an explicit rule value overrides the role default', () => {
   };
   expect(resolveStyle(rule, theme)).toEqual({
     fillStyle: 'solid',
+    // Untouched by the fill override: the two treatments are independent axes,
+    // so overriding how a bar is filled must not restyle the line as well.
+    lineType: 'dashed',
     color: '#123456',
+  });
+});
+
+test('the fill and line overrides are independent of each other', () => {
+  const rule: SeriesStyleRule = {
+    key: { kind: 'metric', metric: 'm' },
+    role: SeriesRole.Actual,
+    lineType: 'dotted',
+  };
+  expect(resolveStyle(rule, theme)).toEqual({
+    fillStyle: 'solid',
+    lineType: 'dotted',
+    color: undefined,
   });
 });
 
@@ -335,5 +351,146 @@ test('still ignores the metric segment when there is more than one', () => {
   ).toBe(false);
   expect(
     matchesRuleKey('Revenue, Plan', { kind: 'dimension', value: 'Plan' }),
+  ).toBe(true);
+});
+
+test('a line series takes the role line type, not the fill treatment', () => {
+  // The Plan role is `outline` for a bar and `dashed` for a line. Applying the
+  // fill treatment here would set `color: 'transparent'` and erase the line.
+  const series: StylableSeries[] = [
+    { name: 'SUM(plan)', type: 'line', itemStyle: { color: '#ff0000' } },
+  ];
+  const [styled] = applySeriesStyles(
+    series,
+    [metricRule('SUM(plan)', SeriesRole.Plan)],
+    theme,
+  );
+
+  expect(styled.lineStyle).toMatchObject({ type: 'dashed', color: '#ff0000' });
+  expect(styled.itemStyle).toEqual({ color: '#ff0000' });
+});
+
+test('a forecast line is dotted and a prior-year line is solid', () => {
+  const series: StylableSeries[] = [
+    { name: 'fc', type: 'line' },
+    { name: 'py', type: 'line' },
+  ];
+  const [forecast, priorYear] = applySeriesStyles(
+    series,
+    [
+      metricRule('fc', SeriesRole.Forecast),
+      metricRule('py', SeriesRole.PriorYear),
+    ],
+    theme,
+  );
+
+  expect(forecast.lineStyle).toMatchObject({ type: 'dotted' });
+  expect(priorYear.lineStyle).toMatchObject({ type: 'solid' });
+});
+
+test('one rule dresses the same metric as both a bar and a line', () => {
+  // The Z-chart shape: query A plots the monthly figure as a bar, query B its
+  // running total as a line, and both are the same metric. A single rule has
+  // to reach both, in the vocabulary each shape understands.
+  const series: StylableSeries[] = [
+    { name: 'SUM(plan)', type: 'bar', itemStyle: { color: '#123456' } },
+    { name: 'SUM(plan)', type: 'line', itemStyle: { color: '#123456' } },
+  ];
+  const [bar, line] = applySeriesStyles(
+    series,
+    [metricRule('SUM(plan)', SeriesRole.Plan)],
+    theme,
+  );
+
+  expect(bar.itemStyle).toMatchObject({
+    color: 'transparent',
+    borderColor: '#123456',
+  });
+  expect(line.lineStyle).toMatchObject({ type: 'dashed' });
+});
+
+test('a rule colour reaches a line and its symbols', () => {
+  const series: StylableSeries[] = [
+    { name: 'plan', type: 'line', itemStyle: { color: '#ff0000', opacity: 0 } },
+  ];
+  const [styled] = applySeriesStyles(
+    series,
+    [
+      {
+        key: { kind: 'metric', metric: 'plan' },
+        role: SeriesRole.Plan,
+        color: '#00ff00',
+      },
+    ],
+    theme,
+  );
+
+  expect(styled.lineStyle).toMatchObject({ color: '#00ff00' });
+  // The symbols follow the line, and the invisible-symbol hack that keeps a
+  // line clickable for cross-filtering survives.
+  expect(styled.itemStyle).toEqual({ color: '#00ff00', opacity: 0 });
+});
+
+test("a line's emphasis state is left alone", () => {
+  // `transformSeries` puts `emphasis.itemStyle.opacity = 1` on a line whose
+  // symbols are hidden for hit-testing. Restating the resolved style over it
+  // would write the hidden `opacity: 0` back and kill the hover affordance.
+  const series: StylableSeries[] = [
+    {
+      name: 'plan',
+      type: 'line',
+      itemStyle: { color: '#ff0000', opacity: 0 },
+      emphasis: { itemStyle: { opacity: 1 } },
+    },
+  ];
+  const [styled] = applySeriesStyles(
+    series,
+    [metricRule('plan', SeriesRole.Plan)],
+    theme,
+  );
+
+  expect(styled.emphasis).toEqual({ itemStyle: { opacity: 1 } });
+});
+
+test('a series with no type still takes the fill treatment', () => {
+  // Keeps the Bar chart behaving as it did before lines existed, and is what a
+  // bare fixture looks like.
+  const series: StylableSeries[] = [{ name: 'plan' }];
+  const [styled] = applySeriesStyles(
+    series,
+    [metricRule('plan', SeriesRole.Plan)],
+    theme,
+  );
+
+  expect(styled.itemStyle).toMatchObject({ color: 'transparent' });
+});
+
+test('a metric rule still matches when query identifiers are shown', () => {
+  // The Mixed chart appends " (Query A)" to the metric part of a series name.
+  // Without stripping it, ticking that checkbox turns every rule into a
+  // silent no-op.
+  const key = { kind: 'metric', metric: 'SUM(sales)' } as const;
+  expect(matchesRuleKey('SUM(sales) (Query A)', key)).toBe(true);
+  expect(matchesRuleKey('SUM(sales) (Query B), EMEA', key)).toBe(true);
+  // Only the suffix goes; a metric that genuinely differs still fails.
+  expect(matchesRuleKey('SUM(costs) (Query A)', key)).toBe(false);
+});
+
+test('a metric whose own name ends in a parenthesis is not truncated', () => {
+  expect(
+    matchesRuleKey('COUNT(Query A)', {
+      kind: 'metric',
+      metric: 'COUNT(Query A)',
+    }),
+  ).toBe(true);
+});
+
+test('every comma in a metric label is escaped, not just the first', () => {
+  // Mirrors Python's `escape_separator`, which has no count limit.
+  expect(
+    matchesRuleKey('AVG(a\\, b\\, c), EMEA', {
+      kind: 'metric',
+      metric: 'AVG(a, b, c)',
+    }),
   ).toBe(true);
 });

@@ -152,6 +152,27 @@ export function getDimensionKeyOptions(
 }
 
 /**
+ * Concatenates option lists, keeping the first spelling of each key.
+ *
+ * The Mixed chart derives options from two queries, and one metric may well be
+ * in both — the ordinary Z-chart shape, where query A is the monthly figure and
+ * query B its running total. A rule keys on the metric and so covers both
+ * series at once, which is exactly what makes the pair read as one role. Two
+ * identical dropdown entries would suggest otherwise, and only the first could
+ * ever be picked.
+ */
+export function mergeRuleKeyOptions(
+  ...lists: RuleKeyOption[][]
+): RuleKeyOption[] {
+  const seen = new Set<string>();
+  return lists.flat().filter(option => {
+    if (seen.has(option.value)) return false;
+    seen.add(option.value);
+    return true;
+  });
+}
+
+/**
  * Human-readable form of a key that no dropdown group offers.
  *
  * Covers two cases that must not silently vanish from the UI: a `pattern` rule,
