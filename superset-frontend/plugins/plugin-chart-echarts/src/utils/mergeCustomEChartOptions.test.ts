@@ -67,20 +67,78 @@ test('mergeCustomEChartOptions deep merges nested objects', () => {
 
 test('mergeCustomEChartOptions replaces arrays entirely', () => {
   const base = {
-    series: [{ name: 'A', type: 'line' }],
+    dataZoom: [{ type: 'inside' }],
+  };
+  const custom: CustomEChartOptions = {
+    dataZoom: [{ type: 'slider' }, { type: 'inside', start: 50 }],
+  };
+
+  const result = mergeCustomEChartOptions(base, custom);
+
+  expect(result.dataZoom).toEqual([
+    { type: 'slider' },
+    { type: 'inside', start: 50 },
+  ]);
+});
+
+test('mergeCustomEChartOptions merges series entries into the series with the same name', () => {
+  const base = {
+    series: [
+      { id: 'plan', name: 'Plan', type: 'bar', data: [1, 2] },
+      { id: 'actual', name: 'Actual', type: 'bar', data: [3, 4] },
+      { id: 'plan-band', name: 'Plan', type: 'line', data: [5, 6] },
+    ],
   };
   const custom: CustomEChartOptions = {
     series: [
-      { name: 'B', type: 'bar' },
-      { name: 'C', type: 'pie' },
+      { id: 'x', name: 'Plan', itemStyle: { borderType: 'dashed' } },
+      { name: 'Missing', itemStyle: { opacity: 0.5 } },
+      { itemStyle: { opacity: 0.1 } },
     ],
   };
 
   const result = mergeCustomEChartOptions(base, custom);
 
   expect(result.series).toEqual([
-    { name: 'B', type: 'bar' },
-    { name: 'C', type: 'pie' },
+    {
+      id: 'plan',
+      name: 'Plan',
+      type: 'bar',
+      data: [1, 2],
+      itemStyle: { borderType: 'dashed' },
+    },
+    { id: 'actual', name: 'Actual', type: 'bar', data: [3, 4] },
+    {
+      id: 'plan-band',
+      name: 'Plan',
+      type: 'line',
+      data: [5, 6],
+      itemStyle: { borderType: 'dashed' },
+    },
+  ]);
+});
+
+test('mergeCustomEChartOptions merges a named series object into the series with that name', () => {
+  const base = {
+    series: [
+      { name: 'Plan', type: 'bar', data: [1, 2] },
+      { name: 'Actual', type: 'bar', data: [3, 4] },
+    ],
+  };
+  const custom: CustomEChartOptions = {
+    series: { name: 'Plan', itemStyle: { borderType: 'dashed' } },
+  };
+
+  const result = mergeCustomEChartOptions(base, custom);
+
+  expect(result.series).toEqual([
+    {
+      name: 'Plan',
+      type: 'bar',
+      data: [1, 2],
+      itemStyle: { borderType: 'dashed' },
+    },
+    { name: 'Actual', type: 'bar', data: [3, 4] },
   ]);
 });
 
@@ -119,7 +177,7 @@ test('mergeCustomEChartOptions merges a series object into every series', () => 
   ]);
 });
 
-test('mergeCustomEChartOptions keeps series names and ids when merging a series object', () => {
+test('mergeCustomEChartOptions keeps series ids when merging a series object', () => {
   const base = {
     series: [
       { id: 'a', name: 'A', type: 'line' },
@@ -127,7 +185,7 @@ test('mergeCustomEChartOptions keeps series names and ids when merging a series 
     ],
   };
   const custom: CustomEChartOptions = {
-    series: { id: 'x', name: 'X', lineStyle: { type: 'dashed' } },
+    series: { id: 'x', lineStyle: { type: 'dashed' } },
   };
 
   const result = mergeCustomEChartOptions(base, custom);

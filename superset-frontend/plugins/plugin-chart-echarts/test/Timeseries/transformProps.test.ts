@@ -1655,7 +1655,6 @@ test('derives custom legend items from a single-object custom series override', 
       name: 'San Francisco',
     }),
     expect.objectContaining({
-      color: '#123456',
       name: 'New York',
     }),
   ]);

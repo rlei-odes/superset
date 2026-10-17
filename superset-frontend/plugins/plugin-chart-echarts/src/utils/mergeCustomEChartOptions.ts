@@ -34,7 +34,9 @@ function isPlainObject(value: unknown): value is PlainObject {
 /**
  * Deep merges custom EChart options into base options.
  * Arrays are replaced entirely, objects are merged recursively.
- * A `series` object is merged into every series, as theme overrides do.
+ * Entries of a `series` array, or a `series` object with a name, are merged
+ * into the series with the same name. A `series` object without a name is
+ * merged into every series, as theme overrides do.
  *
  * @param baseOptions - The base ECharts options object
  * @param customOptions - Custom options to merge (from safeParseEChartOptions)
@@ -70,12 +72,41 @@ export function mergeCustomEChartOptions<T extends EChartsCoreOption>(
       );
     } else if (
       key === 'series' &&
+      Array.isArray(baseValue) &&
+      (Array.isArray(customValue) ||
+        (isPlainObject(customValue) &&
+          (customValue as PlainObject).name !== undefined))
+    ) {
+      // Merge each named entry into the series with the same name, without
+      // copying the id, which must stay unique per series
+      const entries = ([] as unknown[])
+        .concat(customValue)
+        .filter(
+          (entry): entry is PlainObject =>
+            isPlainObject(entry) && entry.name !== undefined,
+        );
+      (result as PlainObject)[key] = baseValue.map(series =>
+        isPlainObject(series)
+          ? entries
+              .filter(entry => entry.name === series.name)
+              .reduce(
+                (merged, { id: _id, ...entry }) =>
+                  mergeCustomEChartOptions(
+                    merged,
+                    entry as CustomEChartOptions,
+                  ),
+                series as EChartsCoreOption,
+              )
+          : series,
+      );
+    } else if (
+      key === 'series' &&
       isPlainObject(customValue) &&
       Array.isArray(baseValue)
     ) {
-      // Apply a single series object to every series, except the fields
-      // that identify an individual series
-      const { name: _name, id: _id, ...shared } = customValue as PlainObject;
+      // Apply a series object without a name to every series, except the id,
+      // which must stay unique per series
+      const { id: _id, ...shared } = customValue as PlainObject;
       (result as PlainObject)[key] = baseValue.map(series =>
         isPlainObject(series)
           ? mergeCustomEChartOptions(
