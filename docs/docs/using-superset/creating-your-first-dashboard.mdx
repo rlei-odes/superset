@@ -519,8 +519,18 @@ Access it via the **Customize** tab → **ECharts Options** section at the botto
 }
 ```
 
+Each entry of a `series` array is merged into the series with the same name, as shown in the legend. Entries that match no series are ignored. A forecast's trend and confidence band carry the name of their metric, so they are styled together with it. For example, a dashed outline on the series named `Plan`:
+
+```json
+{
+  "series": [
+    { "name": "Plan", "itemStyle": { "borderType": "dashed", "borderWidth": 2, "borderColor": "#333" } }
+  ]
+}
+```
+
 :::caution
-ECharts option overrides bypass Superset's validation layer. Invalid option keys are silently ignored by ECharts. Overrides that conflict with Superset-generated options (e.g., `series`) may produce unexpected results.
+ECharts option overrides bypass Superset's validation layer. Invalid option keys are silently ignored by ECharts. Overrides that conflict with Superset-generated options may produce unexpected results.
 :::
 
 ### Table Chart: Exporting Filtered Data

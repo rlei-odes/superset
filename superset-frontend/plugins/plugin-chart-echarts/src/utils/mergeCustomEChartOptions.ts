@@ -34,6 +34,8 @@ function isPlainObject(value: unknown): value is PlainObject {
 /**
  * Deep merges custom EChart options into base options.
  * Arrays are replaced entirely, objects are merged recursively.
+ * Entries of a `series` array, or a `series` object with a name, are merged
+ * into the series with the same name.
  *
  * @param baseOptions - The base ECharts options object
  * @param customOptions - Custom options to merge (from safeParseEChartOptions)
@@ -66,6 +68,35 @@ export function mergeCustomEChartOptions<T extends EChartsCoreOption>(
       (result as PlainObject)[key] = mergeCustomEChartOptions(
         baseValue as EChartsCoreOption,
         customValue as CustomEChartOptions,
+      );
+    } else if (
+      key === 'series' &&
+      Array.isArray(baseValue) &&
+      (Array.isArray(customValue) ||
+        (isPlainObject(customValue) &&
+          (customValue as PlainObject).name !== undefined))
+    ) {
+      // Merge each named entry into the series with the same name, without
+      // copying the id, which must stay unique per series
+      const entries = ([] as unknown[])
+        .concat(customValue)
+        .filter(
+          (entry): entry is PlainObject =>
+            isPlainObject(entry) && entry.name !== undefined,
+        );
+      (result as PlainObject)[key] = baseValue.map(series =>
+        isPlainObject(series)
+          ? entries
+              .filter(entry => entry.name === series.name)
+              .reduce(
+                (merged, { id: _id, ...entry }) =>
+                  mergeCustomEChartOptions(
+                    merged,
+                    entry as CustomEChartOptions,
+                  ),
+                series as EChartsCoreOption,
+              )
+          : series,
       );
     } else {
       // Replace arrays and primitive values directly
